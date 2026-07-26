@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -18,32 +19,32 @@ model User {
 }
 
 model Building {
-  id              String   @id @default(cuid())
-  ownerId         String
-  name            String
-  ownerRefNumber  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  flats           Flat[]
+  id             String   @id @default(cuid())
+  ownerId        String
+  name           String
+  ownerRefNumber String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  flats          Flat[]
 }
 
 model Flat {
-  id                 String     @id @default(cuid())
-  buildingId         String
-  flatNumber         String
-  floor              Int?
-  rooms              Int?
-  sizeSqm            Float?
-  electricBoxNo      String?
-  licenseNo          String?
-  estimatedRent      Float      @default(0)
-  estimatedServices  Float      @default(0)
-  servicesPeriod     String     @default("monthly") // monthly | annual
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-  building           Building   @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  contracts          Contract[]
+  id                String     @id @default(cuid())
+  buildingId        String
+  flatNumber        String
+  floor             Int?
+  rooms             Int?
+  sizeSqm           Float?
+  electricBoxNo     String?
+  licenseNo         String?
+  estimatedRent     Float      @default(0)
+  estimatedServices Float      @default(0)
+  servicesPeriod    String     @default("monthly") // monthly | annual
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  building          Building   @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  contracts         Contract[]
 
   @@unique([buildingId, flatNumber])
 }
@@ -60,23 +61,23 @@ model Tenant {
 }
 
 model Contract {
-  id                 String        @id @default(cuid())
-  flatId             String
-  tenantId           String
-  contractNumber     String
-  startDate          DateTime
-  endDate            DateTime
-  rentAmount         Float
-  installmentCount   Int
-  servicesIncluded   Boolean       @default(false)
-  servicesAmount     Float         @default(0)
-  servicesPeriod     String        @default("monthly") // monthly | annual
-  status             String        @default("active") // active | inactive
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  flat               Flat          @relation(fields: [flatId], references: [id], onDelete: Cascade)
-  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  installments       Installment[]
+  id               String        @id @default(cuid())
+  flatId           String
+  tenantId         String
+  contractNumber   String
+  startDate        DateTime
+  endDate          DateTime
+  rentAmount       Float
+  installmentCount Int
+  servicesIncluded Boolean       @default(false)
+  servicesAmount   Float         @default(0)
+  servicesPeriod   String        @default("monthly") // monthly | annual
+  status           String        @default("active") // active | inactive
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  flat             Flat          @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installments     Installment[]
 }
 
 model Installment {
