@@ -4,22 +4,30 @@
 
 ## الدخول
 
-**إيميل → رمز OTP → دخول** عبر Supabase Auth (بدون كلمة مرور).
+**إيميل → رمز OTP (6 أرقام) → دخول**  
+الإرسال عبر [Resend](https://resend.com) — بدون SMTP داخل Supabase.
 
-## إعداد Supabase Auth
+## إعداد Resend (دقيقتان)
 
-1. Supabase → **Authentication → Providers → Email** → فعّل Email
-2. عطّل "Confirm email" إذا تسبب بإعاقة للاختبار، أو اتركه حسب حاجتك
-3. **Authentication → Email Templates → Magic Link**  
-   تأكد أن القالب فيه الرمز: `{{ .Token }}`
-4. **Project Settings → API** انسخ:
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon` `public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-5. **Authentication → URL Configuration**  
-   - Site URL: `http://localhost:3002` (محلياً) أو رابط Vercel  
-   - Redirect URLs: أضف نفس الروابط
+1. سجّل في [resend.com](https://resend.com) مجاناً
+2. **API Keys → Create API Key** وانسخ المفتاح `re_...`
+3. ضعه في `.env`:
 
-## التشغيل محلياً
+```env
+RESEND_API_KEY="re_xxxxxxxx"
+RESEND_FROM_EMAIL="إجاراتي <onboarding@resend.dev>"
+AUTH_SECRET="any-long-random-string"
+```
+
+> مع `onboarding@resend.dev` يوصل الإيميل **فقط** لبريد حسابك في Resend (للاختبار).  
+> لاحقاً اربط دومينك في Resend عشان ترسل لأي إيميل.
+
+## قاعدة البيانات (Supabase Postgres)
+
+```env
+DATABASE_URL="postgresql://...pooler...:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://...pooler...:5432/postgres"
+```
 
 ```bash
 npm install
@@ -27,14 +35,6 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-افتح [http://localhost:3002](http://localhost:3002)
-
-## متغيرات البيئة
-
-انظر `.env.example`
-
 ## النشر على Vercel
 
-1. Import `alisami4sa/ejarati`
-2. أضف كل متغيرات `.env`
-3. Deploy
+أضف كل متغيرات `.env` ثم Deploy.

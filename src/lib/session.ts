@@ -1,30 +1,21 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
 export async function getSessionUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
 
-  if (!user?.email) return null;
+  const session = await verifySessionToken(token);
+  if (!session) return null;
 
-  const email = user.email.toLowerCase();
-
-  const dbUser = await prisma.user.upsert({
-    where: { email },
-    create: {
-      id: user.id,
-      email,
-      name: user.user_metadata?.name ?? null,
-    },
-    update: {
-      // keep local row in sync with auth identity
-    },
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
   });
 
-  return dbUser;
+  return user;
 }
 
 export async function requireUser() {

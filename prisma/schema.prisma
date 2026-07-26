@@ -17,6 +17,17 @@ model User {
   tenants   Tenant[]
 }
 
+model EmailOtp {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
 model Building {
   id             String   @id @default(cuid())
   ownerId        String

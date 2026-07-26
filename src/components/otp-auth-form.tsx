@@ -1,66 +1,37 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useActionState, useState } from "react";
+import {
+  sendOtpAction,
+  verifyOtpAction,
+  type OtpActionState,
+} from "@/app/actions/auth";
 
 type Step = "email" | "otp";
 
 export function OtpAuthForm() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
 
-  async function sendOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setPending(true);
-    try {
-      const supabase = createClient();
-      const { error: sendError } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: {
-          shouldCreateUser: true,
-        },
-      });
-      if (sendError) {
-        setError(sendError.message || "تعذر إرسال الرمز");
-        return;
+  const [sendState, sendAction, sendPending] = useActionState(
+    async (state: OtpActionState | undefined, formData: FormData) => {
+      const result = await sendOtpAction(state, formData);
+      if (result.ok && result.email) {
+        setEmail(result.email);
+        setStep("otp");
       }
-      setStep("otp");
-    } catch {
-      setError("تعذر الاتصال بخدمة الدخول. تحقق من إعدادات Supabase.");
-    } finally {
-      setPending(false);
-    }
-  }
+      return result;
+    },
+    undefined as OtpActionState | undefined,
+  );
 
-  async function verifyOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setPending(true);
-    try {
-      const supabase = createClient();
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
-        token: otp.trim(),
-        type: "email",
-      });
-      if (verifyError) {
-        setError("الرمز غير صحيح أو منتهي. حاول مرة أخرى.");
-        return;
-      }
-      router.replace("/dashboard");
-      router.refresh();
-    } catch {
-      setError("تعذر التحقق من الرمز");
-    } finally {
-      setPending(false);
-    }
-  }
+  const [verifyState, verifyAction, verifyPending] = useActionState(
+    verifyOtpAction,
+    undefined as OtpActionState | undefined,
+  );
+
+  const error = step === "email" ? sendState?.error : verifyState?.error;
+  const pending = sendPending || verifyPending;
 
   return (
     <div className="auth-page">
@@ -73,16 +44,16 @@ export function OtpAuthForm() {
         </p>
 
         {step === "email" ? (
-          <form onSubmit={sendOtp} className="auth-stack">
+          <form action={sendAction} className="auth-stack">
             <label className="field">
               <span className="field-label">البريد الإلكتروني</span>
               <input
+                name="email"
                 type="email"
                 required
                 autoComplete="email"
                 dir="ltr"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                defaultValue={email}
                 placeholder="name@example.com"
               />
             </label>
@@ -92,49 +63,53 @@ export function OtpAuthForm() {
             </button>
           </form>
         ) : (
-          <form onSubmit={verifyOtp} className="auth-stack">
-            <label className="field">
-              <span className="field-label">رمز التحقق (OTP)</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6,8}"
-                minLength={6}
-                maxLength={8}
-                required
-                dir="ltr"
-                autoComplete="one-time-code"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
-              />
-              <span className="field-hint">تحقق من بريدك — صالح لدقائق قليلة</span>
-            </label>
-            {error && <p className="auth-error">{error}</p>}
-            <button className="btn btn-primary" type="submit" disabled={pending}>
-              {pending ? "جارٍ التحقق..." : "تأكيد الدخول"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={pending}
-              onClick={() => {
-                setStep("email");
-                setOtp("");
-                setError(null);
-              }}
-            >
-              تغيير البريد
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={pending}
-              onClick={sendOtp}
-            >
-              إعادة إرسال الرمز
-            </button>
-          </form>
+          <>
+            <form action={verifyAction} className="auth-stack">
+              <input type="hidden" name="email" value={email} />
+              <label className="field">
+                <span className="field-label">رمز التحقق (OTP)</span>
+                <input
+                  name="otp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  minLength={6}
+                  maxLength={6}
+                  required
+                  dir="ltr"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                />
+                <span className="field-hint">صالح لمدة 10 دقائق</span>
+              </label>
+              {error && <p className="auth-error">{error}</p>}
+              <button className="btn btn-primary" type="submit" disabled={pending}>
+                {pending ? "جارٍ التحقق..." : "تأكيد الدخول"}
+              </button>
+            </form>
+
+            <div className="auth-stack" style={{ marginTop: "0.75rem" }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={pending}
+                onClick={() => setStep("email")}
+              >
+                تغيير البريد
+              </button>
+              <form action={sendAction}>
+                <input type="hidden" name="email" value={email} />
+                <button
+                  className="btn btn-secondary"
+                  type="submit"
+                  disabled={pending}
+                  style={{ width: "100%" }}
+                >
+                  إعادة إرسال الرمز
+                </button>
+              </form>
+            </div>
+          </>
         )}
       </div>
     </div>
