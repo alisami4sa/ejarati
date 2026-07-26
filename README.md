@@ -2,15 +2,24 @@
 
 تطبيق ويب لإدارة العمارات والشقق ودفعات الإيجار في السعودية.
 
-## قاعدة البيانات: Supabase (Postgres)
+## الدخول
 
-1. أنشئ مشروعاً في [supabase.com](https://supabase.com)
-2. ادخل **Project Settings → Database**
-3. انسخ رابطين:
-   - **Connection pooling** → Transaction → URI (منفذ `6543`) → ضعه في `DATABASE_URL` وأضف في آخره `?pgbouncer=true` إن لم يكن موجوداً
-   - **Direct connection** → URI (منفذ `5432`) → ضعه في `DIRECT_URL`
-4. انسخ `.env.example` إلى `.env` والصق الروابط
-5. شغّل الجداول:
+**إيميل → رمز OTP → دخول** عبر Supabase Auth (بدون كلمة مرور).
+
+## إعداد Supabase Auth
+
+1. Supabase → **Authentication → Providers → Email** → فعّل Email
+2. عطّل "Confirm email" إذا تسبب بإعاقة للاختبار، أو اتركه حسب حاجتك
+3. **Authentication → Email Templates → Magic Link**  
+   تأكد أن القالب فيه الرمز: `{{ .Token }}`
+4. **Project Settings → API** انسخ:
+   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon` `public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+5. **Authentication → URL Configuration**  
+   - Site URL: `http://localhost:3002` (محلياً) أو رابط Vercel  
+   - Redirect URLs: أضف نفس الروابط
+
+## التشغيل محلياً
 
 ```bash
 npm install
@@ -22,15 +31,10 @@ npm run dev
 
 ## متغيرات البيئة
 
-```env
-DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://...@db.xxxxx.supabase.co:5432/postgres"
-AUTH_SECRET="مفتاح-عشوائي-طويل"
-AUTH_URL="http://localhost:3002"
-```
+انظر `.env.example`
 
 ## النشر على Vercel
 
-1. Import الريبو من GitHub
-2. أضف نفس المتغيرات أعلاه (`AUTH_URL` = رابط موقعك على Vercel)
-3. Deploy — أمر البناء يشغّل `prisma migrate deploy` تلقائياً
+1. Import `alisami4sa/ejarati`
+2. أضف كل متغيرات `.env`
+3. Deploy
