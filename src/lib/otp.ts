@@ -37,7 +37,8 @@ export async function createAndSendOtp(emailRaw: string) {
   });
 
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const from = process.env.RESEND_FROM_EMAIL || "إجاراتي <onboarding@resend.dev>";
+  const from =
+    process.env.RESEND_FROM_EMAIL || "إجاراتي <noreply@mail.7xgb.online>";
 
   const { error } = await resend.emails.send({
     from,
@@ -54,7 +55,15 @@ export async function createAndSendOtp(emailRaw: string) {
   });
 
   if (error) {
-    return { error: error.message || "تعذر إرسال الإيميل" as const };
+    await prisma.emailOtp.deleteMany({ where: { email } });
+    const msg = error.message || "";
+    if (msg.toLowerCase().includes("verify a domain") || msg.toLowerCase().includes("testing emails")) {
+      return {
+        error:
+          "تحقق من RESEND_FROM_EMAIL أنه على الدومين الموثّق مثل noreply@mail.7xgb.online" as const,
+      };
+    }
+    return { error: msg || ("تعذر إرسال الإيميل" as const) };
   }
 
   return { ok: true as const, email };
