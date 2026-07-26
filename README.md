@@ -35,6 +35,13 @@ npx prisma migrate deploy
 npm run dev
 ```
 
+## PWA
+
+التطبيق قابل للتثبيت على الجوال (Add to Home Screen) بعد النشر على HTTPS (Vercel).
+
+- iPhone: Safari → مشاركة → إضافة إلى الشاشة الرئيسية  
+- Android: Chrome → تثبيت التطبيق / Add to Home screen  
+
 ## النشر على Vercel
 
 أضف كل متغيرات `.env` ثم Deploy.
