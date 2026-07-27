@@ -6,9 +6,8 @@ import { BuildingFlats, type FlatRow } from "@/components/building-flats";
 import { DeleteButton } from "@/components/delete-button";
 import { Stat } from "@/components/stat";
 import { startOfDayLocal } from "@/lib/dates";
-import { formatMoney, isActiveContract } from "@/lib/format";
+import { formatMoney, isOpenContract } from "@/lib/format";
 import { formatDeedDate } from "@/lib/hijri";
-import { annualizeServices } from "@/lib/installments";
 import { sumPaidThisYear, sumUnpaidThroughYearEnd } from "@/lib/payments";
 import { getBuildingDetail } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
@@ -27,22 +26,18 @@ export default async function BuildingPage({
 
   let paidYtd = 0;
   let unpaid = 0;
-  let servicesTotal = 0;
   let occupied = 0;
 
   const flatRows: FlatRow[] = building.flats.map((flat) => {
     const active =
       flat.contracts.find((c) =>
-        isActiveContract(c.startDate, c.endDate, c.status),
+        isOpenContract(c.startDate, c.endDate, c.status),
       ) ?? null;
 
     if (active) {
       occupied += 1;
-      servicesTotal += annualizeServices(active.servicesAmount, active.servicesPeriod);
       paidYtd += sumPaidThisYear(active.installments);
       unpaid += sumUnpaidThroughYearEnd(active.installments);
-    } else {
-      servicesTotal += annualizeServices(flat.estimatedServices, flat.servicesPeriod);
     }
 
     const unpaidInstallments =
@@ -58,9 +53,6 @@ export default async function BuildingPage({
     return {
       id: flat.id,
       flatNumber: flat.flatNumber,
-      estimatedRent: flat.estimatedRent,
-      estimatedServices: flat.estimatedServices,
-      servicesPeriod: flat.servicesPeriod,
       activeContract: active
         ? {
             id: active.id,
@@ -71,8 +63,6 @@ export default async function BuildingPage({
             endDate: active.endDate.toISOString(),
             status: active.status,
             rentAmount: active.rentAmount,
-            servicesIncluded: active.servicesIncluded,
-            servicesAmount: active.servicesAmount,
             hasOverdue,
             nextDue: nextDue
               ? {
@@ -131,7 +121,7 @@ export default async function BuildingPage({
         <Stat
           label="المتبقي حتى نهاية السنة"
           value={`${formatMoney(unpaid)} ر.س`}
-          hint={`دفعات ${new Date().getFullYear()} غير المدفوعة · خدمات العمارة ${formatMoney(servicesTotal)} ر.س/سنة`}
+          hint={`دفعات ${new Date().getFullYear()} غير المدفوعة`}
         />
       </div>
 

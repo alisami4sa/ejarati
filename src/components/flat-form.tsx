@@ -17,9 +17,6 @@ type FlatDefaults = {
   sizeSqm?: number | null;
   electricBoxNo?: string | null;
   licenseNo?: string | null;
-  estimatedRent?: number;
-  estimatedServices?: number;
-  servicesPeriod?: string;
 };
 
 export function FlatForm({
@@ -28,12 +25,15 @@ export function FlatForm({
   flatId,
   cancelHref,
   defaults,
+  availableNumbers,
 }: {
   mode?: "create" | "edit";
   buildingId: string;
   flatId?: string;
   cancelHref: string;
   defaults?: FlatDefaults;
+  /** Unused flat numbers for this building (current number included when editing). */
+  availableNumbers: string[];
 }) {
   const action =
     mode === "edit" && flatId
@@ -45,6 +45,11 @@ export function FlatForm({
     undefined,
   );
 
+  const defaultNumber =
+    defaults?.flatNumber && availableNumbers.includes(defaults.flatNumber)
+      ? defaults.flatNumber
+      : availableNumbers[0];
+
   return (
     <form action={formAction} className="panel" style={{ padding: "1.25rem" }}>
       {mode === "create" && (
@@ -53,18 +58,27 @@ export function FlatForm({
       <div className="form-grid">
         <label className="field">
           <span className="field-label">رقم الشقة</span>
-          <input
-            name="flatNumber"
-            required
-            dir="ltr"
-            inputMode="numeric"
-            pattern={patterns.flatNumber}
-            minLength={1}
-            maxLength={10}
-            placeholder="1"
-            title="أرقام فقط"
-            defaultValue={defaults?.flatNumber}
-          />
+          {availableNumbers.length === 0 ? (
+            <>
+              <select name="flatNumber" disabled required>
+                <option value="">لا توجد أرقام متاحة</option>
+              </select>
+              <span className="field-hint">كل أرقام الشقق من 1 إلى 20 مستخدمة</span>
+            </>
+          ) : (
+            <select
+              name="flatNumber"
+              required
+              dir="ltr"
+              defaultValue={defaultNumber}
+            >
+              {availableNumbers.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
         <label className="field">
           <span className="field-label">الدور</span>
@@ -128,45 +142,14 @@ export function FlatForm({
             defaultValue={defaults?.licenseNo ?? ""}
           />
         </label>
-        <label className="field">
-          <span className="field-label">الإيجار التقديري (سنوي)</span>
-          <input
-            name="estimatedRent"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step="1"
-            required
-            defaultValue={defaults?.estimatedRent ?? 0}
-          />
-        </label>
-        <label className="field">
-          <span className="field-label">مبلغ الخدمات التقديري</span>
-          <input
-            name="estimatedServices"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step="1"
-            required
-            defaultValue={defaults?.estimatedServices ?? 0}
-          />
-        </label>
-        <label className="field">
-          <span className="field-label">دورة الخدمات</span>
-          <select
-            name="servicesPeriod"
-            defaultValue={defaults?.servicesPeriod ?? "monthly"}
-            required
-          >
-            <option value="monthly">شهري</option>
-            <option value="annual">سنوي</option>
-          </select>
-        </label>
       </div>
       <FormError message={state?.error} />
       <div className="stack-actions" style={{ marginTop: "1.25rem" }}>
-        <button type="submit" className="btn btn-primary" disabled={pending}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={pending || availableNumbers.length === 0}
+        >
           {pending
             ? "جارٍ الحفظ..."
             : mode === "edit"

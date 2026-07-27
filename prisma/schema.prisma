@@ -50,9 +50,6 @@ model Flat {
   sizeSqm           Float?
   electricBoxNo     String?
   licenseNo         String?
-  estimatedRent     Float      @default(0)
-  estimatedServices Float      @default(0)
-  servicesPeriod    String     @default("monthly") // monthly | annual
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   building          Building   @relation(fields: [buildingId], references: [id], onDelete: Cascade)
@@ -79,11 +76,8 @@ model Contract {
   contractNumber   String
   startDate        DateTime
   endDate          DateTime
-  rentAmount       Float
+  rentAmount       Int
   installmentCount Int
-  servicesIncluded Boolean       @default(false)
-  servicesAmount   Float         @default(0)
-  servicesPeriod   String        @default("monthly") // monthly | annual
   status           String        @default("active") // active | inactive
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -96,7 +90,7 @@ model Installment {
   id         String    @id @default(cuid())
   contractId String
   dueDate    DateTime
-  amount     Float
+  amount     Int
   status     String    @default("pending") // pending | paid | overdue
   paidAt     DateTime?
   createdAt  DateTime  @default(now())

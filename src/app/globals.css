@@ -473,6 +473,18 @@ table.data tr:hover td {
   color: var(--ink-soft);
 }
 
+.duplicate-flat {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.duplicate-flat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
 .field-hint {
   font-size: 0.8rem;
   color: var(--muted);
@@ -501,6 +513,12 @@ table.data tr:hover td {
 .date-trigger {
   text-align: right;
   cursor: pointer;
+}
+
+.date-trigger[aria-readonly="true"] {
+  cursor: default;
+  background: #f4f7f5;
+  color: var(--ink-soft);
 }
 
 .date-popover {

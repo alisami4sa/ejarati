@@ -1,19 +1,22 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import type { ActionState } from "@/app/actions/buildings";
+import { availableFlatNumbers, FLAT_NUMBER_MAX } from "@/lib/flats";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import {
   firstZodError,
   flatNumberSchema,
   meterNumberSchema,
-  moneySchema,
   optionalFloatSchema,
   optionalIntSchema,
 } from "@/lib/validation";
+
+export type DuplicateFlatState = { error?: string } | undefined;
 
 const flatSchema = z.object({
   buildingId: z.string().min(1),
@@ -23,9 +26,6 @@ const flatSchema = z.object({
   sizeSqm: optionalFloatSchema("المساحة", 1, 10000),
   electricBoxNo: meterNumberSchema,
   licenseNo: meterNumberSchema,
-  estimatedRent: moneySchema("الإيجار التقديري", { min: 0 }),
-  estimatedServices: moneySchema("مبلغ الخدمات", { min: 0 }),
-  servicesPeriod: z.enum(["monthly", "annual"]),
 });
 
 async function assertBuilding(buildingId: string, ownerId: string) {
@@ -45,9 +45,6 @@ function parseFlatForm(formData: FormData, withBuildingId: boolean) {
     sizeSqm: formData.get("sizeSqm"),
     electricBoxNo: String(formData.get("electricBoxNo") ?? ""),
     licenseNo: String(formData.get("licenseNo") ?? ""),
-    estimatedRent: formData.get("estimatedRent") || 0,
-    estimatedServices: formData.get("estimatedServices") || 0,
-    servicesPeriod: formData.get("servicesPeriod") || "monthly",
   };
 }
 
@@ -72,17 +69,21 @@ export async function createFlatAction(
         sizeSqm: parsed.data.sizeSqm,
         electricBoxNo: parsed.data.electricBoxNo || null,
         licenseNo: parsed.data.licenseNo || null,
-        estimatedRent: parsed.data.estimatedRent,
-        estimatedServices: parsed.data.estimatedServices,
-        servicesPeriod: parsed.data.servicesPeriod,
       },
     });
 
     revalidatePath(`/buildings/${parsed.data.buildingId}`);
     revalidatePath("/dashboard");
     redirect(`/flats/${flat.id}`);
-  } catch {
-    return { error: "تعذر حفظ الشقة. تأكد أن رقم الشقة غير مكرر في العمارة" };
+  } catch (error) {
+    unstable_rethrow(error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { error: "رقم الشقة مستخدم مسبقاً في هذه العمارة" };
+    }
+    return { error: "تعذر حفظ الشقة. حاول مرة أخرى" };
   }
 }
 
@@ -113,19 +114,23 @@ export async function updateFlatAction(
         sizeSqm: parsed.data.sizeSqm,
         electricBoxNo: parsed.data.electricBoxNo || null,
         licenseNo: parsed.data.licenseNo || null,
-        estimatedRent: parsed.data.estimatedRent,
-        estimatedServices: parsed.data.estimatedServices,
-        servicesPeriod: parsed.data.servicesPeriod,
       },
     });
-  } catch {
-    return { error: "تعذر التعديل. تأكد أن رقم الشقة غير مكرر في العمارة" };
-  }
 
-  revalidatePath(`/flats/${flatId}`);
-  revalidatePath(`/buildings/${flat.buildingId}`);
-  revalidatePath("/dashboard");
-  redirect(`/flats/${flatId}`);
+    revalidatePath(`/flats/${flatId}`);
+    revalidatePath(`/buildings/${flat.buildingId}`);
+    revalidatePath("/dashboard");
+    redirect(`/flats/${flatId}`);
+  } catch (error) {
+    unstable_rethrow(error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { error: "رقم الشقة مستخدم مسبقاً في هذه العمارة" };
+    }
+    return { error: "تعذر التعديل. حاول مرة أخرى" };
+  }
 }
 
 export async function deleteFlatAction(flatId: string) {
@@ -140,4 +145,69 @@ export async function deleteFlatAction(flatId: string) {
   revalidatePath(`/buildings/${flat.buildingId}`);
   revalidatePath("/dashboard");
   redirect(`/buildings/${flat.buildingId}`);
+}
+
+/** Copy flat specs (no meters) into the next available numbers. */
+export async function duplicateFlatAction(
+  flatId: string,
+  _: DuplicateFlatState,
+  formData: FormData,
+): Promise<DuplicateFlatState> {
+  const user = await requireUser();
+  const countRaw = Number(formData.get("count"));
+  const count = Number.isInteger(countRaw) ? countRaw : NaN;
+  if (!Number.isFinite(count) || count < 1 || count > FLAT_NUMBER_MAX) {
+    return { error: `اختر عدداً من 1 إلى ${FLAT_NUMBER_MAX}` };
+  }
+
+  const source = await prisma.flat.findFirst({
+    where: { id: flatId, building: { ownerId: user.id } },
+    include: {
+      building: {
+        include: { flats: { select: { flatNumber: true } } },
+      },
+    },
+  });
+  if (!source) return { error: "الشقة غير موجودة" };
+
+  const free = availableFlatNumbers(
+    source.building.flats.map((f) => f.flatNumber),
+  );
+  if (free.length === 0) {
+    return { error: "لا توجد أرقام شقق متاحة في هذه العمارة" };
+  }
+  if (count > free.length) {
+    return {
+      error: `المتاح حالياً ${free.length} رقم فقط. اختر عدداً أقل أو يساوي ${free.length}`,
+    };
+  }
+
+  const numbers = free.slice(0, count);
+
+  try {
+    await prisma.flat.createMany({
+      data: numbers.map((flatNumber) => ({
+        buildingId: source.buildingId,
+        flatNumber,
+        floor: source.floor,
+        rooms: source.rooms,
+        sizeSqm: source.sizeSqm,
+        electricBoxNo: null,
+        licenseNo: null,
+      })),
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { error: "تعذر التكرار بسبب تعارض في أرقام الشقق. حدّث الصفحة وحاول مجدداً" };
+    }
+    return { error: "تعذر تكرار الشقة. حاول مرة أخرى" };
+  }
+
+  revalidatePath(`/buildings/${source.buildingId}`);
+  revalidatePath("/dashboard");
+  redirect(`/buildings/${source.buildingId}`);
 }

@@ -78,7 +78,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <div className="cell-strong">{formatMoney(b.leasesYearlyTotal)} ر.س</div>
-                  <div className="cell-muted">إجمالي الإيجارات (سنوي)</div>
+                  <div className="cell-muted">إيجارات العقود (سنوي)</div>
                 </div>
                 <div>
                   {b.overdue > 0 ? (

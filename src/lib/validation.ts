@@ -71,12 +71,20 @@ export const flatNumberSchema = z
     message: "رقم الشقة يجب أن يكون أرقاماً فقط",
   });
 
+/** Whole riyals only — rounds and rejects non-finite values. */
 export function moneySchema(label: string, opts?: { min?: number }) {
   const min = opts?.min ?? 0;
-  return z.coerce
-    .number()
-    .refine((v) => Number.isFinite(v), { message: `${label} غير صالح` })
-    .min(min, { message: `${label} لا يمكن أن يكون أقل من ${min}` });
+  return z.preprocess(
+    (v) => {
+      if (v === "" || v === null || v === undefined) return v;
+      const n = typeof v === "number" ? v : Number(String(v).trim());
+      return Number.isFinite(n) ? Math.round(n) : n;
+    },
+    z
+      .number({ error: `${label} غير صالح` })
+      .int({ message: `${label} يجب أن يكون ريالاً صحيحاً` })
+      .min(min, { message: `${label} لا يمكن أن يكون أقل من ${min}` }),
+  );
 }
 
 export function optionalIntSchema(label: string, min = 0, max = 200) {

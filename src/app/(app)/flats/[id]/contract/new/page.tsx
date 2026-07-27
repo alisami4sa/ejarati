@@ -13,7 +13,10 @@ export default async function NewContractPage({
   const { id } = await params;
   const flat = await prisma.flat.findFirst({
     where: { id, building: { ownerId: user.id } },
-    include: { building: true },
+    select: {
+      id: true,
+      flatNumber: true,
+    },
   });
   if (!flat) notFound();
 
@@ -32,9 +35,6 @@ export default async function NewContractPage({
       <ContractForm
         flatId={flat.id}
         flatHref={`/flats/${flat.id}`}
-        defaultRent={flat.estimatedRent || undefined}
-        defaultServices={flat.estimatedServices}
-        defaultServicesPeriod={flat.servicesPeriod}
       />
     </>
   );

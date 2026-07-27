@@ -9,14 +9,12 @@ import {
   formatMoney,
   formatRemainingLabel,
   isActiveContract,
+  isOpenContract,
 } from "@/lib/format";
 
 export type FlatRow = {
   id: string;
   flatNumber: string;
-  estimatedRent: number;
-  estimatedServices: number;
-  servicesPeriod: string;
   activeContract: null | {
     id: string;
     contractNumber: string;
@@ -26,8 +24,6 @@ export type FlatRow = {
     status: string;
     startDate: string;
     rentAmount: number;
-    servicesIncluded: boolean;
-    servicesAmount: number;
     nextDue: null | {
       id: string;
       dueDate: string;
@@ -95,7 +91,7 @@ export function BuildingFlats({ flats }: { flats: FlatRow[] }) {
               <th>المستأجر</th>
               <th>العقد</th>
               <th>المتبقي على العقد</th>
-              <th>الإيجار / الخدمات</th>
+              <th>الإيجار</th>
               <th>أقرب استحقاق</th>
               <th></th>
             </tr>
@@ -135,6 +131,12 @@ export function BuildingFlats({ flats }: { flats: FlatRow[] }) {
                           c.status,
                         ) ? (
                           <span className="badge badge-ok">نشط</span>
+                        ) : isOpenContract(
+                            new Date(c.startDate),
+                            new Date(c.endDate),
+                            c.status,
+                          ) ? (
+                          <span className="badge badge-ok">يبدأ لاحقاً</span>
                         ) : (
                           <span className="badge badge-muted">غير نشط</span>
                         )
@@ -158,29 +160,11 @@ export function BuildingFlats({ flats }: { flats: FlatRow[] }) {
                     </td>
                     <td>
                       {c ? (
-                        <>
-                          <div className="cell-strong">
-                            {formatMoney(c.rentAmount)} ر.س
-                          </div>
-                          <div className="cell-muted">
-                            {c.servicesIncluded ? "شامل الخدمات" : "غير شامل"}
-                            {!c.servicesIncluded && c.servicesAmount > 0
-                              ? ` · ${formatMoney(c.servicesAmount)}`
-                              : ""}
-                          </div>
-                        </>
+                        <div className="cell-strong">
+                          {formatMoney(c.rentAmount)} ر.س
+                        </div>
                       ) : (
-                        <>
-                          <div className="cell-strong">
-                            تقديري {formatMoney(flat.estimatedRent)} ر.س
-                          </div>
-                          <div className="cell-muted">
-                            خدمات{" "}
-                            {flat.estimatedServices > 0
-                              ? `${formatMoney(flat.estimatedServices)} (${flat.servicesPeriod === "annual" ? "سنوي" : "شهري"})`
-                              : "—"}
-                          </div>
-                        </>
+                        <div className="cell-strong">بدون عقد</div>
                       )}
                     </td>
                     <td>

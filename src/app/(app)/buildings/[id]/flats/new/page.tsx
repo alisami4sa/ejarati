@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BackButton } from "@/components/back-button";
 import { FlatForm } from "@/components/flat-form";
+import { availableFlatNumbers } from "@/lib/flats";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 
@@ -13,8 +14,13 @@ export default async function NewFlatPage({
   const { id } = await params;
   const building = await prisma.building.findFirst({
     where: { id, ownerId: user.id },
+    include: { flats: { select: { flatNumber: true } } },
   });
   if (!building) notFound();
+
+  const numbers = availableFlatNumbers(
+    building.flats.map((f) => f.flatNumber),
+  );
 
   return (
     <>
@@ -23,13 +29,14 @@ export default async function NewFlatPage({
           <BackButton href={`/buildings/${building.id}`} label={`رجوع إلى ${building.name}`} />
           <h1 className="page-title">إضافة شقة</h1>
           <p className="page-sub">
-            إذا كانت فارغة، ضع الإيجار التقديري ومبلغ الخدمات لتعرف قيمة الشغور
+            الإيجار يُدخل لاحقاً مع العقد والمستأجر — هنا مواصفات الشقة فقط
           </p>
         </div>
       </div>
       <FlatForm
         buildingId={building.id}
         cancelHref={`/buildings/${building.id}`}
+        availableNumbers={numbers}
       />
     </>
   );

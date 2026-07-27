@@ -1,4 +1,4 @@
-import { addMonths, format } from "date-fns";
+import { addDays, addMonths, addYears, differenceInCalendarDays, format } from "date-fns";
 
 /** Parse yyyy-MM-dd as a local calendar date (noon) — avoids UTC day-shift. */
 export function parseDateInput(value: string): Date {
@@ -44,4 +44,25 @@ export function generateInstallmentDates(
     dates.push(addMonths(base, Math.round(intervalMonths * i)));
   }
   return dates;
+}
+
+/** Next term after renewal: same length, starting on the previous end date. */
+export function nextContractTerm(startDate: Date, endDate: Date) {
+  const start = startOfDayLocal(startDate);
+  start.setHours(12, 0, 0, 0);
+  const end = startOfDayLocal(endDate);
+  end.setHours(12, 0, 0, 0);
+
+  const newStart = new Date(end);
+  for (const years of [1, 2, 3, 4, 5]) {
+    if (toDateKey(addYears(start, years)) === toDateKey(end)) {
+      return { startDate: newStart, endDate: addYears(newStart, years) };
+    }
+  }
+
+  const days = differenceInCalendarDays(end, start);
+  return {
+    startDate: newStart,
+    endDate: addDays(newStart, Math.max(days, 1)),
+  };
 }

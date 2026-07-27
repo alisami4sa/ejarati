@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import type { ActionState } from "@/app/actions/buildings";
-import { parseDateInput } from "@/lib/dates";
+import { syncContractInstallments } from "@/lib/contract-installments";
+import { nextContractTerm, parseDateInput } from "@/lib/dates";
+import { isEndedContract, isOpenContract } from "@/lib/format";
 import {
   generateInstallmentDates,
-  installmentAmount,
+  splitRentInstallments,
 } from "@/lib/installments";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -21,7 +23,7 @@ import {
 } from "@/lib/validation";
 
 const contractSchema = z.object({
-  flatId: z.string().min(1),
+  flatId: z.string().min(1).optional(),
   tenantName: personNameSchema,
   tenantMobile: saudiMobileSchema,
   tenantNationalId: saudiNationalIdSchema,
@@ -35,18 +37,11 @@ const contractSchema = z.object({
     .refine((v) => [1, 2, 3, 4, 12].includes(v), {
       message: "عدد الدفعات غير صالح",
     }),
-  servicesIncluded: z.enum(["yes", "no"]),
-  servicesAmount: moneySchema("مبلغ الخدمات", { min: 0 }),
-  servicesPeriod: z.enum(["monthly", "annual"]),
 });
 
-export async function createContractAction(
-  _: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireUser();
-  const parsed = contractSchema.safeParse({
-    flatId: formData.get("flatId"),
+function parseContractForm(formData: FormData, withFlatId: boolean) {
+  return {
+    ...(withFlatId ? { flatId: String(formData.get("flatId") || "") } : {}),
     tenantName: formData.get("tenantName"),
     tenantMobile: formData.get("tenantMobile"),
     tenantNationalId: String(formData.get("tenantNationalId") ?? ""),
@@ -55,10 +50,26 @@ export async function createContractAction(
     endDate: formData.get("endDate"),
     rentAmount: formData.get("rentAmount"),
     installmentCount: formData.get("installmentCount"),
-    servicesIncluded: formData.get("servicesIncluded") === "yes" ? "yes" : "no",
-    servicesAmount: formData.get("servicesAmount") || 0,
-    servicesPeriod: formData.get("servicesPeriod") || "monthly",
-  });
+  };
+}
+
+function parseContractDates(startRaw: string, endRaw: string) {
+  const startDate = parseDateInput(startRaw);
+  const endDate = parseDateInput(endRaw);
+  if (endDate.getTime() <= startDate.getTime()) {
+    throw new Error("END_BEFORE_START");
+  }
+  return { startDate, endDate };
+}
+
+export async function createContractAction(
+  _: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = contractSchema
+    .extend({ flatId: z.string().min(1) })
+    .safeParse(parseContractForm(formData, true));
 
   if (!parsed.success) return { error: firstZodError(parsed.error) };
 
@@ -70,68 +81,147 @@ export async function createContractAction(
   let startDate: Date;
   let endDate: Date;
   try {
-    startDate = parseDateInput(parsed.data.startDate);
-    endDate = parseDateInput(parsed.data.endDate);
-  } catch {
+    ({ startDate, endDate } = parseContractDates(
+      parsed.data.startDate,
+      parsed.data.endDate,
+    ));
+  } catch (e) {
+    if (e instanceof Error && e.message === "END_BEFORE_START") {
+      return { error: "تاريخ النهاية يجب أن يكون بعد البداية" };
+    }
     return { error: "التواريخ غير صالحة — اخترها من التقويم" };
   }
 
-  if (endDate.getTime() <= startDate.getTime()) {
-    return { error: "تاريخ النهاية يجب أن يكون بعد البداية" };
-  }
-
-  const active = await prisma.contract.findFirst({
-    where: { flatId: flat.id, status: "active" },
-  });
-  if (active) {
-    await prisma.contract.update({
-      where: { id: active.id },
-      data: { status: "inactive" },
+  try {
+    const active = await prisma.contract.findFirst({
+      where: { flatId: flat.id, status: "active" },
     });
+    if (active) {
+      await prisma.contract.update({
+        where: { id: active.id },
+        data: { status: "inactive" },
+      });
+    }
+
+    const tenant = await prisma.tenant.create({
+      data: {
+        ownerId: user.id,
+        name: parsed.data.tenantName,
+        mobile: parsed.data.tenantMobile,
+        nationalId: parsed.data.tenantNationalId || null,
+      },
+    });
+
+    const dates = generateInstallmentDates(
+      startDate,
+      parsed.data.installmentCount,
+    );
+    const amounts = splitRentInstallments(
+      parsed.data.rentAmount,
+      parsed.data.installmentCount,
+    );
+
+    const contract = await prisma.contract.create({
+      data: {
+        flatId: flat.id,
+        tenantId: tenant.id,
+        contractNumber: parsed.data.contractNumber,
+        startDate,
+        endDate,
+        rentAmount: parsed.data.rentAmount,
+        installmentCount: parsed.data.installmentCount,
+        status: "active",
+        installments: {
+          create: dates.map((dueDate, i) => ({
+            dueDate,
+            amount: amounts[i] ?? 0,
+            status: "pending",
+          })),
+        },
+      },
+    });
+
+    revalidatePath(`/flats/${flat.id}`);
+    revalidatePath(`/buildings/${flat.buildingId}`);
+    revalidatePath("/dashboard");
+    redirect(`/flats/${flat.id}?contract=${contract.id}`);
+  } catch (error) {
+    unstable_rethrow(error);
+    return { error: "تعذر حفظ العقد. حاول مرة أخرى" };
+  }
+}
+
+export async function updateContractAction(
+  contractId: string,
+  _: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const existing = await prisma.contract.findFirst({
+    where: { id: contractId, flat: { building: { ownerId: user.id } } },
+    include: { flat: true, tenant: true },
+  });
+  if (!existing) return { error: "العقد غير موجود" };
+  if (existing.status !== "active") {
+    return { error: "لا يمكن تعديل عقد منتهٍ" };
   }
 
-  const tenant = await prisma.tenant.create({
-    data: {
-      ownerId: user.id,
-      name: parsed.data.tenantName,
-      mobile: parsed.data.tenantMobile,
-      nationalId: parsed.data.tenantNationalId || null,
-    },
-  });
+  const parsed = contractSchema.safeParse(parseContractForm(formData, false));
+  if (!parsed.success) return { error: firstZodError(parsed.error) };
 
-  const amount = installmentAmount(
-    parsed.data.rentAmount,
-    parsed.data.installmentCount,
-  );
-  const dates = generateInstallmentDates(startDate, parsed.data.installmentCount);
+  let startDate: Date;
+  let endDate: Date;
+  try {
+    ({ startDate, endDate } = parseContractDates(
+      parsed.data.startDate,
+      parsed.data.endDate,
+    ));
+  } catch (e) {
+    if (e instanceof Error && e.message === "END_BEFORE_START") {
+      return { error: "تاريخ النهاية يجب أن يكون بعد البداية" };
+    }
+    return { error: "التواريخ غير صالحة — اخترها من التقويم" };
+  }
 
-  const contract = await prisma.contract.create({
-    data: {
-      flatId: flat.id,
-      tenantId: tenant.id,
-      contractNumber: parsed.data.contractNumber,
-      startDate,
-      endDate,
-      rentAmount: parsed.data.rentAmount,
-      installmentCount: parsed.data.installmentCount,
-      servicesIncluded: parsed.data.servicesIncluded === "yes",
-      servicesAmount: parsed.data.servicesAmount,
-      servicesPeriod: parsed.data.servicesPeriod,
-      status: "active",
-      installments: {
-        create: dates.map((dueDate) => ({
-          dueDate,
-          amount,
-          status: "pending",
-        })),
-      },
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.tenant.update({
+        where: { id: existing.tenantId },
+        data: {
+          name: parsed.data.tenantName,
+          mobile: parsed.data.tenantMobile,
+          nationalId: parsed.data.tenantNationalId || null,
+        },
+      });
 
-  revalidatePath(`/flats/${flat.id}`);
-  revalidatePath(`/buildings/${flat.buildingId}`);
-  revalidatePath("/dashboard");
-  redirect(`/flats/${flat.id}?contract=${contract.id}`);
+      await tx.contract.update({
+        where: { id: contractId },
+        data: {
+          contractNumber: parsed.data.contractNumber,
+          startDate,
+          endDate,
+          rentAmount: parsed.data.rentAmount,
+          installmentCount: parsed.data.installmentCount,
+        },
+      });
+
+      await syncContractInstallments(
+        tx,
+        contractId,
+        startDate,
+        parsed.data.rentAmount,
+        parsed.data.installmentCount,
+      );
+    });
+
+    revalidatePath(`/flats/${existing.flatId}`);
+    revalidatePath(`/buildings/${existing.flat.buildingId}`);
+    revalidatePath("/dashboard");
+    redirect(`/flats/${existing.flatId}`);
+  } catch (error) {
+    unstable_rethrow(error);
+    return { error: "تعذر تعديل العقد. حاول مرة أخرى" };
+  }
 }
 
 export async function markInstallmentPaidAction(installmentId: string) {
@@ -150,7 +240,6 @@ export async function markInstallmentPaidAction(installmentId: string) {
     data: { status: "paid", paidAt: new Date() },
   });
 
-  // Revalidate only the open page — avoid 3× remote DB refetches
   revalidatePath(`/flats/${installment.contract.flatId}`);
 }
 
@@ -189,4 +278,76 @@ export async function endContractAction(contractId: string) {
   revalidatePath(`/flats/${contract.flatId}`);
   revalidatePath(`/buildings/${contract.flat.buildingId}`);
   revalidatePath("/dashboard");
+}
+
+/**
+ * Renew an ended contract with the same tenant, rent, installment count,
+ * and duration. For any change, the owner should create a new contract.
+ */
+export async function renewContractAction(contractId: string) {
+  const user = await requireUser();
+  const previous = await prisma.contract.findFirst({
+    where: { id: contractId, flat: { building: { ownerId: user.id } } },
+    include: { flat: true, tenant: true },
+  });
+  if (!previous) throw new Error("العقد غير موجود");
+
+  if (!isEndedContract(previous.endDate, previous.status)) {
+    throw new Error("لا يمكن التجديد قبل انتهاء العقد الحالي");
+  }
+
+  const siblings = await prisma.contract.findMany({
+    where: { flatId: previous.flatId, status: "active" },
+  });
+  if (
+    siblings.some(
+      (c) =>
+        c.id !== previous.id &&
+        isOpenContract(c.startDate, c.endDate, c.status),
+    )
+  ) {
+    throw new Error("يوجد عقد ساري على هذه الشقة");
+  }
+
+  const term = nextContractTerm(previous.startDate, previous.endDate);
+  const dates = generateInstallmentDates(term.startDate, previous.installmentCount);
+  const amounts = splitRentInstallments(
+    previous.rentAmount,
+    previous.installmentCount,
+  );
+
+  try {
+    await prisma.contract.updateMany({
+      where: { flatId: previous.flatId, status: "active" },
+      data: { status: "inactive" },
+    });
+
+    const renewed = await prisma.contract.create({
+      data: {
+        flatId: previous.flatId,
+        tenantId: previous.tenantId,
+        contractNumber: previous.contractNumber,
+        startDate: term.startDate,
+        endDate: term.endDate,
+        rentAmount: previous.rentAmount,
+        installmentCount: previous.installmentCount,
+        status: "active",
+        installments: {
+          create: dates.map((dueDate, i) => ({
+            dueDate,
+            amount: amounts[i] ?? 0,
+            status: "pending",
+          })),
+        },
+      },
+    });
+
+    revalidatePath(`/flats/${previous.flatId}`);
+    revalidatePath(`/buildings/${previous.flat.buildingId}`);
+    revalidatePath("/dashboard");
+    redirect(`/flats/${previous.flatId}?contract=${renewed.id}`);
+  } catch (error) {
+    unstable_rethrow(error);
+    throw error;
+  }
 }
