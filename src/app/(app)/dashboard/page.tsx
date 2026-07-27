@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Stat } from "@/components/stat";
 import { formatMoney } from "@/lib/format";
+import { formatDeedDate } from "@/lib/hijri";
 import { getDashboardData } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 
@@ -15,9 +16,11 @@ export default async function DashboardPage() {
           <h1 className="page-title">لوحة المتابعة</h1>
           <p className="page-sub">عماراتك، شققك، وما دُفع وما تبقّى حتى نهاية السنة</p>
         </div>
-        <Link href="/buildings/new" className="btn btn-primary">
-          إضافة عمارة
-        </Link>
+        <div className="stack-actions">
+          <Link href="/buildings/new" className="btn btn-primary">
+            إضافة عمارة
+          </Link>
+        </div>
       </div>
 
       <div className="stats">
@@ -57,6 +60,11 @@ export default async function DashboardPage() {
                   {b.ownerRefNumber && (
                     <div className="building-meta">رقم الصك: {b.ownerRefNumber}</div>
                   )}
+                  {b.deedDate && (
+                    <div className="building-meta">
+                      تاريخ الصك: {formatDeedDate(b.deedDate, b.deedCalendar)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="cell-strong">{b.flatCount}</div>
@@ -69,8 +77,8 @@ export default async function DashboardPage() {
                   <div className="cell-muted">مؤجرة / فارغة</div>
                 </div>
                 <div>
-                  <div className="cell-strong">{formatMoney(b.servicesTotal)} ر.س</div>
-                  <div className="cell-muted">إجمالي خدمات (سنوي)</div>
+                  <div className="cell-strong">{formatMoney(b.leasesYearlyTotal)} ر.س</div>
+                  <div className="cell-muted">إجمالي الإيجارات (سنوي)</div>
                 </div>
                 <div>
                   {b.overdue > 0 ? (

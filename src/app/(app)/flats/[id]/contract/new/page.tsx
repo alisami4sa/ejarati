@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackButton } from "@/components/back-button";
 import { ContractForm } from "@/components/contract-form";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -20,12 +20,11 @@ export default async function NewContractPage({
   return (
     <>
       <div className="page-head">
-        <div>
-          <p className="page-sub">
-            <Link href={`/flats/${flat.id}`}>
-              {flat.building.name} / شقة {flat.flatNumber}
-            </Link>
-          </p>
+        <div className="page-head-main">
+          <BackButton
+            href={`/flats/${flat.id}`}
+            label={`رجوع إلى شقة ${flat.flatNumber}`}
+          />
           <h1 className="page-title">عقد جديد</h1>
           <p className="page-sub">التواريخ من التقويم فقط — والجوال بصيغة 05xxxxxxxx</p>
         </div>

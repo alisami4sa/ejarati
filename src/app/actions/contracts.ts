@@ -150,9 +150,8 @@ export async function markInstallmentPaidAction(installmentId: string) {
     data: { status: "paid", paidAt: new Date() },
   });
 
+  // Revalidate only the open page — avoid 3× remote DB refetches
   revalidatePath(`/flats/${installment.contract.flatId}`);
-  revalidatePath(`/buildings/${installment.contract.flat.buildingId}`);
-  revalidatePath("/dashboard");
 }
 
 export async function markInstallmentUnpaidAction(installmentId: string) {
@@ -172,8 +171,6 @@ export async function markInstallmentUnpaidAction(installmentId: string) {
   });
 
   revalidatePath(`/flats/${installment.contract.flatId}`);
-  revalidatePath(`/buildings/${installment.contract.flat.buildingId}`);
-  revalidatePath("/dashboard");
 }
 
 export async function endContractAction(contractId: string) {

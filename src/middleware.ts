@@ -4,7 +4,8 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthPage = path.startsWith("/login") || path.startsWith("/register");
-  const isPublic = path === "/" || isAuthPage;
+  const isCron = path.startsWith("/api/cron/");
+  const isPublic = path === "/" || isAuthPage || isCron;
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = token ? await verifySessionToken(token) : null;

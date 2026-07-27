@@ -13,10 +13,19 @@ type Props = {
   required?: boolean;
 };
 
+function parseDefaultDate(value?: string) {
+  if (!value) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+  }
+  return new Date(value);
+}
+
 export function DatePickerField({ name, label, defaultValue, required }: Props) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Date | undefined>(() =>
-    defaultValue ? new Date(defaultValue) : undefined,
+    parseDefaultDate(defaultValue),
   );
   const rootRef = useRef<HTMLDivElement>(null);
 

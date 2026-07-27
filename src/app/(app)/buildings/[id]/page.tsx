@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deleteBuildingAction } from "@/app/actions/buildings";
+import { BackButton } from "@/components/back-button";
 import { BuildingFlats, type FlatRow } from "@/components/building-flats";
+import { DeleteButton } from "@/components/delete-button";
 import { Stat } from "@/components/stat";
 import { startOfDayLocal } from "@/lib/dates";
 import { formatMoney, isActiveContract } from "@/lib/format";
+import { formatDeedDate } from "@/lib/hijri";
 import { annualizeServices } from "@/lib/installments";
 import { sumPaidThisYear, sumUnpaidThroughYearEnd } from "@/lib/payments";
 import { getBuildingDetail } from "@/lib/queries";
@@ -86,19 +90,31 @@ export default async function BuildingPage({
   return (
     <>
       <div className="page-head">
-        <div>
-          <p className="page-sub">
-            <Link href="/dashboard">لوحة المتابعة</Link> / عمارة
-          </p>
+        <div className="page-head-main">
+          <BackButton href="/dashboard" label="رجوع للوحة" />
           <h1 className="page-title">{building.name}</h1>
           {building.ownerRefNumber && (
             <p className="page-sub">رقم الصك: {building.ownerRefNumber}</p>
+          )}
+          {building.deedDate && (
+            <p className="page-sub">
+              تاريخ الصك:{" "}
+              {formatDeedDate(building.deedDate, building.deedCalendar)}
+            </p>
           )}
         </div>
         <div className="stack-actions">
           <Link href={`/buildings/${building.id}/flats/new`} className="btn btn-primary">
             إضافة شقة
           </Link>
+          <Link href={`/buildings/${building.id}/edit`} className="btn btn-secondary">
+            تعديل
+          </Link>
+          <DeleteButton
+            action={deleteBuildingAction.bind(null, building.id)}
+            label="حذف العمارة"
+            confirmMessage={`حذف عمارة "${building.name}"؟ سيتم حذف كل الشقق والعقود والدفعات المرتبطة بها.`}
+          />
         </div>
       </div>
 

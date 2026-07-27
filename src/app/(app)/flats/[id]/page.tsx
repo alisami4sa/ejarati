@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { endContractAction } from "@/app/actions/contracts";
+import { deleteFlatAction } from "@/app/actions/flats";
+import { BackButton } from "@/components/back-button";
+import { DeleteButton } from "@/components/delete-button";
 import { InstallmentList } from "@/components/installment-actions";
 import { Stat } from "@/components/stat";
 import {
@@ -32,11 +35,11 @@ export default async function FlatPage({
   return (
     <>
       <div className="page-head">
-        <div>
-          <p className="page-sub">
-            <Link href={`/buildings/${flat.buildingId}`}>{flat.building.name}</Link>{" "}
-            / شقة {flat.flatNumber}
-          </p>
+        <div className="page-head-main">
+          <BackButton
+            href={`/buildings/${flat.buildingId}`}
+            label={`رجوع إلى ${flat.building.name}`}
+          />
           <h1 className="page-title">شقة {flat.flatNumber}</h1>
           <p className="page-sub">
             {empty ? (
@@ -52,6 +55,14 @@ export default async function FlatPage({
               إضافة عقد ومستأجر
             </Link>
           )}
+          <Link href={`/flats/${flat.id}/edit`} className="btn btn-secondary">
+            تعديل
+          </Link>
+          <DeleteButton
+            action={deleteFlatAction.bind(null, flat.id)}
+            label="حذف الشقة"
+            confirmMessage={`حذف شقة ${flat.flatNumber}؟ سيتم حذف عقودها ودفعاتها أيضاً.`}
+          />
         </div>
       </div>
 

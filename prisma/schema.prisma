@@ -29,13 +29,15 @@ model EmailOtp {
 }
 
 model Building {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   ownerId        String
   name           String
   ownerRefNumber String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  deedDate       DateTime?
+  deedCalendar   String? // hijri | gregorian — required when deedDate is set
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   flats          Flat[]
 }
 

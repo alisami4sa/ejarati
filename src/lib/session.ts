@@ -1,9 +1,15 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
-export async function getSessionUser() {
+export type SessionUser = {
+  id: string;
+  email: string;
+};
+
+/** Fast auth: JWT only — no database round-trip. Cached per request. */
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -11,12 +17,8 @@ export async function getSessionUser() {
   const session = await verifySessionToken(token);
   if (!session) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.id },
-  });
-
-  return user;
-}
+  return { id: session.id, email: session.email };
+});
 
 export async function requireUser() {
   const user = await getSessionUser();

@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackButton } from "@/components/back-button";
 import { FlatForm } from "@/components/flat-form";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -19,10 +19,8 @@ export default async function NewFlatPage({
   return (
     <>
       <div className="page-head">
-        <div>
-          <p className="page-sub">
-            <Link href={`/buildings/${building.id}`}>{building.name}</Link> / شقة جديدة
-          </p>
+        <div className="page-head-main">
+          <BackButton href={`/buildings/${building.id}`} label={`رجوع إلى ${building.name}`} />
           <h1 className="page-title">إضافة شقة</h1>
           <p className="page-sub">
             إذا كانت فارغة، ضع الإيجار التقديري ومبلغ الخدمات لتعرف قيمة الشغور
@@ -31,7 +29,7 @@ export default async function NewFlatPage({
       </div>
       <FlatForm
         buildingId={building.id}
-        buildingHref={`/buildings/${building.id}`}
+        cancelHref={`/buildings/${building.id}`}
       />
     </>
   );

@@ -1,23 +1,41 @@
+import { cache } from "react";
 import { startOfDayLocal } from "@/lib/dates";
 import { isActiveContract } from "@/lib/format";
-import { annualizeServices } from "@/lib/installments";
 import { sumPaidThisYear, sumUnpaidThroughYearEnd } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 
-export async function getDashboardData(ownerId: string) {
+export const getDashboardData = cache(async (ownerId: string) => {
   const buildings = await prisma.building.findMany({
     where: { ownerId },
     orderBy: { createdAt: "asc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      ownerRefNumber: true,
+      deedDate: true,
+      deedCalendar: true,
       flats: {
-        include: {
+        select: {
+          id: true,
+          estimatedRent: true,
           contracts: {
             where: { status: "active" },
-            include: {
-              tenant: true,
-              installments: true,
-            },
             orderBy: { startDate: "desc" },
+            take: 1,
+            select: {
+              startDate: true,
+              endDate: true,
+              status: true,
+              rentAmount: true,
+              installments: {
+                select: {
+                  amount: true,
+                  status: true,
+                  dueDate: true,
+                  paidAt: true,
+                },
+              },
+            },
           },
         },
       },
@@ -33,39 +51,38 @@ export async function getDashboardData(ownerId: string) {
   for (const b of buildings) {
     flatCount += b.flats.length;
     for (const flat of b.flats) {
-      const contract =
-        flat.contracts.find((c) =>
-          isActiveContract(c.startDate, c.endDate, c.status),
-        ) ?? flat.contracts[0];
+      const contract = flat.contracts[0];
       if (!contract) continue;
+      if (!isActiveContract(contract.startDate, contract.endDate, contract.status)) {
+        continue;
+      }
       paidYtd += sumPaidThisYear(contract.installments);
       unpaidToYearEnd += sumUnpaidThroughYearEnd(contract.installments);
     }
   }
 
   const buildingSummaries = buildings.map((b) => {
-    const servicesTotal = b.flats.reduce((sum, flat) => {
-      const contract =
-        flat.contracts.find((c) =>
-          isActiveContract(c.startDate, c.endDate, c.status),
-        ) ?? null;
-      if (contract) {
-        return sum + annualizeServices(contract.servicesAmount, contract.servicesPeriod);
+    // Yearly lease value: active contract rent, else estimated rent for empty flats
+    const leasesYearlyTotal = b.flats.reduce((sum, flat) => {
+      const contract = flat.contracts[0];
+      if (
+        contract &&
+        isActiveContract(contract.startDate, contract.endDate, contract.status)
+      ) {
+        return sum + contract.rentAmount;
       }
-      return sum + annualizeServices(flat.estimatedServices, flat.servicesPeriod);
+      return sum + (flat.estimatedRent || 0);
     }, 0);
 
-    const occupied = b.flats.filter((f) =>
-      f.contracts.some((c) => isActiveContract(c.startDate, c.endDate, c.status)),
-    ).length;
+    const occupied = b.flats.filter((f) => {
+      const c = f.contracts[0];
+      return c && isActiveContract(c.startDate, c.endDate, c.status);
+    }).length;
 
     let overdue = 0;
     for (const flat of b.flats) {
-      const c =
-        flat.contracts.find((x) =>
-          isActiveContract(x.startDate, x.endDate, x.status),
-        ) ?? flat.contracts[0];
-      if (!c) continue;
+      const c = flat.contracts[0];
+      if (!c || !isActiveContract(c.startDate, c.endDate, c.status)) continue;
       overdue += c.installments.filter(
         (i) => i.status !== "paid" && startOfDayLocal(i.dueDate) < today,
       ).length;
@@ -75,10 +92,12 @@ export async function getDashboardData(ownerId: string) {
       id: b.id,
       name: b.name,
       ownerRefNumber: b.ownerRefNumber,
+      deedDate: b.deedDate,
+      deedCalendar: b.deedCalendar,
       flatCount: b.flats.length,
       occupied,
       empty: b.flats.length - occupied,
-      servicesTotal,
+      leasesYearlyTotal,
       overdue,
     };
   });
@@ -90,41 +109,62 @@ export async function getDashboardData(ownerId: string) {
     paidYtd,
     unpaidToYearEnd,
   };
-}
+});
 
-export async function getBuildingDetail(buildingId: string, ownerId: string) {
-  const building = await prisma.building.findFirst({
+export const getBuildingDetail = cache(async (buildingId: string, ownerId: string) => {
+  return prisma.building.findFirst({
     where: { id: buildingId, ownerId },
     include: {
       flats: {
         orderBy: { flatNumber: "asc" },
         include: {
           contracts: {
+            where: { status: "active" },
+            take: 1,
+            orderBy: { startDate: "desc" },
             include: {
               tenant: true,
-              installments: { orderBy: { dueDate: "asc" } },
+              installments: {
+                orderBy: { dueDate: "asc" },
+                select: {
+                  id: true,
+                  dueDate: true,
+                  amount: true,
+                  status: true,
+                  paidAt: true,
+                },
+              },
             },
-            orderBy: { startDate: "desc" },
           },
         },
       },
     },
   });
-  return building;
-}
+});
 
-export async function getFlatDetail(flatId: string, ownerId: string) {
+export const getFlatDetail = cache(async (flatId: string, ownerId: string) => {
   return prisma.flat.findFirst({
     where: { id: flatId, building: { ownerId } },
     include: {
-      building: true,
+      building: { select: { id: true, name: true } },
       contracts: {
+        where: { status: "active" },
+        take: 1,
+        orderBy: { startDate: "desc" },
         include: {
           tenant: true,
-          installments: { orderBy: { dueDate: "asc" } },
+          installments: {
+            orderBy: { dueDate: "asc" },
+            select: {
+              id: true,
+              dueDate: true,
+              amount: true,
+              status: true,
+              paidAt: true,
+            },
+          },
         },
-        orderBy: { startDate: "desc" },
       },
     },
   });
-}
+});

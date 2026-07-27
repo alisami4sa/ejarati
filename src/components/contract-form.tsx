@@ -113,7 +113,7 @@ export function ContractForm({
           {pending ? "جارٍ الحفظ..." : "حفظ العقد وتوليد الدفعات"}
         </button>
         <Link href={flatHref} className="btn btn-secondary">
-          إلغاء
+          رجوع
         </Link>
       </div>
     </form>
